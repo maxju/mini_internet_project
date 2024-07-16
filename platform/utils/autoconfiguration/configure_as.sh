@@ -3,13 +3,13 @@
 
 ### TO UPDATE ###
 # this variable is the absolute path to the platform directory.
-PLATFORM_DIR=/home/alex/mini_internet_project/platform
+PLATFORM_DIR=/home/service/mini_internet_project/platform
 # this variable includes all the AS number that need to be configured.
-ASN_TO_CONFIGURE="30 69 88"
+ASN_TO_CONFIGURE="1 2 3 4 5 6 11 12 13 14 15 16 21 22 23 24 25 26 31 32 33 34 35 36 41 42 43 44 45 46 51 52 53 54 55 56 61 62 63 64 65 66 71 72 73 74 75 76 81 82 83 84 85 86"
 # this variable contains all the router names that need to be configured.
 # The order is important, as it will be used to assign IP addresses to the routers.
-ROUTER_NAMES="ZURI BERN LUCE BASE GENE LAUS LUGA STGA"
-CONFIG_FILES="conf_init.sh conf_full.sh conf_rpki.sh"
+ROUTER_NAMES="CAIR KHAR LUAN CAPE ADDI ACCR"
+CONFIG_FILES="conf_init.sh conf_full.sh"
 
 echo "Updating configs."
 echo "You can ignore 'route-map' does not exist error (it will be defined)"
