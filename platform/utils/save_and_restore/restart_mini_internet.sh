@@ -84,8 +84,9 @@ restore_configs() {
 
     echo "Restoring config on AS: ${as}"
     docker cp "./configs-as-${as}.tar.gz" "${as}_ssh:/root/"
-    docker exec -w /root "${as}_ssh" bash -c "./restore_configs.sh configs-as-${as}.tar.gz all" <<< "Y"
-
+    docker exec -iw /root "${as}_ssh" bash -c "./restore_configs.sh configs-as-${as}.tar.gz all" << EOF
+Y
+EOF
     # Extract the config file
     rm -rf configs_*
     tar -xf "configs-as-${as}.tar.gz"
