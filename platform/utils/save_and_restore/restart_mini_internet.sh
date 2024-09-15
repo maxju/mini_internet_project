@@ -305,26 +305,28 @@ welcome() {
 run() {
   local specified_backup="$1"
 
-  for action in "${!options[@]}"; do
-    if ${options[$action]}; then
-      check_if_root
-      check_students_as_len
-      check_routers
-      case $action in
-        backup) save_configs ;;
-        restart) reset_with_startup ;;
-        restore) 
-          if [ -n "$specified_backup" ]; then
-            restore_configs "$specified_backup"
-          else
-            restore_configs
-          fi
-          echo "Restart complete, here are all passwords..."
-          show_passwords
-          ;;
-      esac
+  check_if_root
+  check_students_as_len
+  check_routers
+
+  # Perform actions in a specific order: backup, restart, restore
+  if ${options[backup]}; then
+    save_configs
+  fi
+
+  if ${options[restart]}; then
+    reset_with_startup
+  fi
+
+  if ${options[restore]}; then
+    if [ -n "$specified_backup" ]; then
+      restore_configs "$specified_backup"
+    else
+      restore_configs
     fi
-  done
+    echo "Restore complete, here are all passwords..."
+    show_passwords
+  fi
 }
 
 welcome "$@"
