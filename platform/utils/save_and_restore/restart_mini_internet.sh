@@ -228,11 +228,22 @@ run() {
 
 check_students_as_len() {
     if [[ ${#students_as[@]} -eq 0 ]]; then
-      echo -e "error: students_as is empty\n"
-      show_help
-      exit 1
+        # If students_as is empty, read from AS_config.txt
+        readarray -t students_as < <(awk '$2 == "AS" && $3 == "NoConfig" {print $1}' "$WORKDIR/../config/AS_config.txt")
+        if [[ ${#students_as[@]} -eq 0 ]]; then
+            echo -e "error: Unable to find student AS groups in AS_config.txt\n"
+            show_help
+            exit 1
+        fi
     fi
     echo "Students AS groups: ${students_as[@]}"
+    # Ask for confirmation before proceeding
+    echo -n "Do you want to continue with these AS groups? (y/n): "
+    read answer
+    if [[ "$answer" != "y" && "$answer" != "Y" ]]; then
+        echo "Operation cancelled."
+        exit 0
+    fi
 }
 
 welcome() {
