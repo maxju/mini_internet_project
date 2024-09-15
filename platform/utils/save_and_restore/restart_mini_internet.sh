@@ -25,10 +25,18 @@ save_configs() {
   echo "Backup directory: $backup_dir"
 
   for as in "${students_as[@]}"; do
-    echo "Saving config on AS: ${as}"
-    docker exec -w /root "${as}_ssh" bash -c 'rm -rfv configs* && ./save_configs.sh'
-    docker cp "${as}_ssh:/root/configs-as-${as}.tar.gz" "./configs-as-${as}.tar.gz"
-    echo "Config for AS ${as} saved successfully."
+    docker exec -itw /root ${as}_ssh bash -c 'rm -rfv configs*' > /dev/null
+    docker exec -itw /root ${as}_ssh "./save_configs.sh" > /dev/null
+
+    configName=$(docker exec -itw /root ${as}_ssh bash -c 'find . -maxdepth 1 -regex \./.*.tar.gz' | sed -e 's/\r$//')
+    docker exec -itw /root ${as}_ssh bash -c "mv $configName configs-as-${as}.tar.gz"
+
+    if docker cp ${as}_ssh:/root/configs-as-${as}.tar.gz ./configs-as-${as}.tar.gz; then
+        echo "Config file for AS ${as} copied successfully."
+    else
+        echo "Error: Failed to copy config file for AS ${as}."
+        exit 1
+    fi
   done
 
   echo "Backup process completed."
