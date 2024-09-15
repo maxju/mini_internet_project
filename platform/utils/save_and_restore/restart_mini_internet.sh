@@ -154,7 +154,7 @@ restore_switches() {
     docker exec -w /root "${container_name}" bash -c 'ovsdb-client restore < /root/switch.db'
     sleep 2
     docker exec -w /root "${container_name}" bash -c 'rm /root/switch.db'
-  done < config/l2_switches.txt
+  done < "$WORKDIR/config/l2_switches.txt"
 }
 
 restore_network_hosts() {
@@ -181,7 +181,7 @@ restore_network_hosts() {
       docker exec -w /root "${container_name}" ip address add "${ipv6}" dev "${as}-${switch}" &> /dev/null
     fi
     docker exec -w /root "${container_name}" ip route add default via "${default_route}" &> /dev/null
-  done < config/l2_hosts.txt
+  done < "$WORKDIR/config/l2_hosts.txt"
 }
 
 show_passwords() {
