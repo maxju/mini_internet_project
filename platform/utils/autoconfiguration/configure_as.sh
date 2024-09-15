@@ -3,13 +3,33 @@
 
 ### TO UPDATE ###
 # this variable is the absolute path to the platform directory.
-PLATFORM_DIR=/home/service/mini_internet_project/platform
+PLATFORM_DIR="$(pwd)"
 # this variable includes all the AS number that need to be configured.
-ASN_TO_CONFIGURE="1 2 3 4 5 6 11 12 13 14 15 16 21 22 23 24 25 26 31 32 33 34 35 36 41 42 43 44 45 46 51 52 53 54 55 56 61 62 63 64 65 66 71 72 73 74 75 76 81 82 83 84 85 86"
+ASN_TO_CONFIGURE=""
 # this variable contains all the router names that need to be configured.
 # The order is important, as it will be used to assign IP addresses to the routers.
-ROUTER_NAMES="CAIR KHAR LUAN CAPE ADDI ACCR"
+ROUTER_NAMES=""
 CONFIG_FILES="conf_init.sh conf_full.sh"
+
+if [[ ${#ASN_TO_CONFIGURE[@]} -eq 0 ]]; then
+        # If ASN_TO_CONFIGURE is empty, read from AS_config.txt
+        readarray -t ASN_TO_CONFIGURE < <(awk '$2 == "AS" && $3 == "NoConfig" {print $1}' "$PLATFORM_DIR/config/AS_config.txt")
+        if [[ ${#ASN_TO_CONFIGURE[@]} -eq 0 ]]; then
+            echo -e "error: Unable to find student AS groups in AS_config.txt\n"
+            exit 1
+        fi
+        echo "AS numbers to configure: ${ASN_TO_CONFIGURE[@]}"
+    fi
+
+if [[ ${#ROUTER_NAMES[@]} -eq 0 ]]; then
+        # If ROUTER_NAMES is empty, read from l3_routers.txt
+        readarray -t ROUTER_NAMES < <(awk '{print $1}' "$PLATFORM_DIR/config/l3_routers.txt")
+        if [[ ${#ROUTER_NAMES[@]} -eq 0 ]]; then
+            echo -e "error: Unable to find router names in l3_routers.txt\n"
+            exit 1
+        fi
+        echo "Router names: ${ROUTER_NAMES[@]}"
+    fi
 
 echo "Updating configs."
 echo "You can ignore 'route-map' does not exist error (it will be defined)"
