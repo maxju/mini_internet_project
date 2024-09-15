@@ -5,10 +5,10 @@
 # this variable is the absolute path to the platform directory.
 PLATFORM_DIR="$(pwd)"
 # this variable includes all the AS number that need to be configured.
-ASN_TO_CONFIGURE=""
+ASN_TO_CONFIGURE=()
 # this variable contains all the router names that need to be configured.
 # The order is important, as it will be used to assign IP addresses to the routers.
-ROUTER_NAMES=""
+ROUTER_NAMES=()
 CONFIG_FILES="conf_init.sh conf_full.sh"
 
 if [[ ${#ASN_TO_CONFIGURE[@]} -eq 0 ]]; then
