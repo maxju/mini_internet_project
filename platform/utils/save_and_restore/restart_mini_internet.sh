@@ -1,35 +1,22 @@
 #!/bin/bash
-# modified from https://github.com/anandadfoxx/mini_internet_project/tree/restartor
+# modified script from https://github.com/nsg-ethz/mini_internet_project/pull/43
 
 WORKDIR="$(pwd)"
-routers=('CAIR' 'KHAR' 'LUAN' 'CAPE' 'ADDI' 'ACCR' 'NAIR' 'KINS')
+students_as=()
+routers=()
 
-# Variables for this script
-isDoBackup=false
-isDoRestart=false
-isDoRestore=false
-useIPv6=true  # Set this to false to disable IPv6 operations
+useIPv6=true
 
 # save all configs first
 save_configs() {
-  cd $WORKDIR/../
-  if ! [[ -d students_config ]]; then
-    mkdir students_config
-  fi
+  local config_dir="$WORKDIR/../students_config"
+  mkdir -p "$config_dir"
+  cd "$config_dir" && rm -rf *
 
-  cd students_config/
-  rm -rf *
-
-  for as in ${students_as[@]}; do
+  for as in "${students_as[@]}"; do
     echo "Saving config on AS: ${as}"
-
-    docker exec -itw /root ${as}_ssh bash -c 'rm -rfv configs*' > /dev/null
-    docker exec -itw /root ${as}_ssh "./save_configs.sh" > /dev/null
-
-    configName=$(docker exec -itw /root ${as}_ssh bash -c 'find . -maxdepth 1 -regex \./.*.tar.gz' | sed -e 's/\r$//')
-    docker exec -itw /root ${as}_ssh bash -c "mv $configName configs-as-${as}.tar.gz"
-
-    docker cp ${as}_ssh:/root/configs-as-${as}.tar.gz ./configs-as-${as}.tar.gz
+    docker exec -w /root "${as}_ssh" bash -c 'rm -rfv configs* && ./save_configs.sh'
+    docker cp "${as}_ssh:/root/configs-as-${as}.tar.gz" "./configs-as-${as}.tar.gz"
   done
 }
 
@@ -39,11 +26,11 @@ reset_with_startup() {
   
   # Hard reset
   echo "Executing cleanup.sh & hard_reset.sh ..."
-  ./cleanup/cleanup.sh .
-  ./cleanup/hard_reset.sh .
+  ./cleanup/cleanup.sh . && ./cleanup/hard_reset.sh .
 
   # Then startup
   echo "Executing startup.sh ..."
+  # currently disabled the iptables filters feature
   # ./startup.sh . && ./utils/iptables/filters.sh .
   ./startup.sh .
 
@@ -55,110 +42,110 @@ reset_with_startup() {
 }
 
 restore_configs() {
-  for as in ${students_as[@]}; do
-    cd $WORKDIR/../students_config/
+  for as in "${students_as[@]}"; do
+    local config_dir="$WORKDIR/../students_config"
+    cd "$config_dir"
 
     echo "Restoring config on AS: ${as}"
-    docker cp ./configs-as-${as}.tar.gz ${as}_ssh:/root/configs-as-${as}.tar.gz
-
-    docker exec -iw /root ${as}_ssh bash -c "./restore_configs.sh configs-as-${as}.tar.gz all" << EOF
-Y
-EOF
+    docker cp "./configs-as-${as}.tar.gz" "${as}_ssh:/root/"
+    docker exec -w /root "${as}_ssh" bash -c "./restore_configs.sh configs-as-${as}.tar.gz all" <<< "Y"
 
     # Extract the config file
-    cd $WORKDIR/../students_config/; rm -rf configs_*; tar -xf configs-as-${as}.tar.gz
-    # Get configs folder name
-    configs_folder_name=$(ls -d */ | grep configs)
+    rm -rf configs_*
+    tar -xf "configs-as-${as}.tar.gz"
+    local configs_folder_name=$(ls -d */ | grep configs)
 
-    # Restore router files
-    for rc in ${routers[@]}; do
-      cd $WORKDIR/../students_config/
-
-      container_name=${as}_${rc}router
-
-      # Overwrite backuped router config file to the /etc/frr/frr.conf
-      echo "Restoring $container_name configuration..."
-      docker cp ${configs_folder_name}${rc}/router.conf ${container_name}:/root/frr.conf
-
-      # Remove the building configuration and current configuration text
-      docker exec -itw /root ${container_name} bash -c 'sed '1,3d' /root/frr.conf > /root/frr-removed-header.conf'
-
-      docker exec -itw /root ${container_name} bash -c '/usr/lib/frr/frr-reload.py --reload /root/frr-removed-header.conf'
-      sleep 2
-      docker exec -itw /root ${container_name} bash -c 'rm /root/{frr,frr-removed-header}.conf'
-    done
-    
-    # Restore router hosts
-    for rc in ${routers[@]}; do
-      cd $WORKDIR/../students_config/
-
-      container_name=${as}_${rc}host
-
-      echo "Restoring $container_name configuration..."
-      # Get the IPv4 address
-      ipv4=$(cat ${configs_folder_name}${rc}/host.ip | grep -w inet | grep ${rc}router | awk '{print $2}')
-      echo "Backuped $container_name IPv4: ${ipv4}"
-      # Get the IPv6 address
-      if [ "$useIPv6" = true ]; then
-        ipv6=$(cat ${configs_folder_name}${rc}/host.ip | grep -w inet6 | grep ${rc}router | awk '{print $2}')
-        echo "Backuped $container_name IPv6: ${ipv6}"
-      fi
-      # Get default route (IPv4 only?)
-      default_route=$(cat ${configs_folder_name}${rc}/host.route | grep -w default | awk '{print $3}')
-      echo "Backuped $container_name Default Route: ${default_route}"
-
-      # Adding the IPv4 and IPv6 address
-      docker exec -itw /root ${container_name} ip address add ${ipv4} dev ${rc}router &> /dev/null
-      if [ "$useIPv6" = true ]; then
-        docker exec -itw /root ${container_name} ip address add ${ipv6} dev ${rc}router &> /dev/null
-      fi
-      docker exec -itw /root ${container_name} ip route add default via ${default_route} &> /dev/null
-    done
-    
-    # Restore switch files into switch
-    while IFS= read -r network switch _; do
-      cd $WORKDIR/../students_config/
-
-      container_name=${as}_L2_${network}_${switch}
-
-      # Get configs folder name
-      configs_folder_name=$(ls -d */ | grep configs)
-
-      # Overwrite backuped switch file to the /etc/openvswitch/conf.db
-      echo "Restoring $container_name configuration..."
-      docker cp ${configs_folder_name}${switch}/switch.db ${container_name}:/root/switch.db
-      docker exec -itw /root ${container_name} bash -c 'ovsdb-client restore < /root/switch.db'
-      sleep 2
-      docker exec -itw /root ${container_name} bash -c 'rm /root/switch.db'
-    done < config/l2_switches.txt
-
-    # Restore Datacenter Hosts
-    while IFS= read -r host image network switch _; do
-      cd "$WORKDIR/../students_config/"
-
-      container_name=${as}_L2_${network}_${host}
-
-      echo "Restoring $container_name configuration..."
-      # Get the IPv4 address
-      ipv4=$(grep -w inet "${configs_folder_name}${host}/host.ip" | grep "${as}-${switch}" | awk '{print $2}')
-      echo "Backuped $container_name IPv4: ${ipv4}"
-      # Get the IPv6 address
-      if [ "$useIPv6" = true ]; then
-        ipv6=$(grep -w inet6 "${configs_folder_name}${host}/host.ip" | grep "${as}-${switch}" | awk '{print $2}')
-        echo "Backuped $container_name IPv6: ${ipv6}"
-      fi
-      # Get default route (IPv4 only?)
-      default_route=$(grep -w default "${configs_folder_name}${host}/host.route" | awk '{print $3}')
-      echo "Backuped $container_name Default Route: ${default_route}"
-
-      # Adding the IPv4 and IPv6 address
-      docker exec -itw /root "${container_name}" ip address add "${ipv4}" dev "${as}-${switch}" &> /dev/null
-      if [ "$useIPv6" = true ]; then
-        docker exec -itw /root "${container_name}" ip address add "${ipv6}" dev "${as}-${switch}" &> /dev/null
-      fi
-      docker exec -itw /root "${container_name}" ip route add default via "${default_route}" &> /dev/null
-    done < config/l2_hosts.txt
+    restore_routers "$as" "$configs_folder_name"
+    restore_hosts "$as" "$configs_folder_name"
+    restore_switches "$as" "$configs_folder_name"
+    restore_datacenter_hosts "$as" "$configs_folder_name"
   done
+}
+
+restore_routers() {
+  local as="$1"
+  local configs_folder_name="$2"
+  
+  for rc in "${routers[@]}"; do
+    local container_name="${as}_${rc}router"
+    echo "Restoring $container_name configuration..."
+    
+    docker cp "${configs_folder_name}${rc}/router.conf" "${container_name}:/root/frr.conf"
+    docker exec -w /root "${container_name}" bash -c '
+      sed "1,3d" /root/frr.conf > /root/frr-removed-header.conf
+      /usr/lib/frr/frr-reload.py --reload /root/frr-removed-header.conf
+      rm /root/{frr,frr-removed-header}.conf
+    '
+  done
+}
+
+restore_hosts() {
+  local as="$1"
+  local configs_folder_name="$2"
+  
+  for rc in "${routers[@]}"; do
+    local container_name="${as}_${rc}host"
+    echo "Restoring $container_name configuration..."
+    
+    local ipv4=$(grep -w inet "${configs_folder_name}${rc}/host.ip" | grep "${rc}router" | awk '{print $2}')
+    echo "Backuped $container_name IPv4: ${ipv4}"
+    
+    if [ "$useIPv6" = true ]; then
+      local ipv6=$(grep -w inet6 "${configs_folder_name}${rc}/host.ip" | grep "${rc}router" | awk '{print $2}')
+      echo "Backuped $container_name IPv6: ${ipv6}"
+    fi
+    
+    local default_route=$(grep -w default "${configs_folder_name}${rc}/host.route" | awk '{print $3}')
+    echo "Backuped $container_name Default Route: ${default_route}"
+    
+    docker exec -w /root "${container_name}" ip address add "${ipv4}" dev "${rc}router" &> /dev/null
+    if [ "$useIPv6" = true ]; then
+      docker exec -w /root "${container_name}" ip address add "${ipv6}" dev "${rc}router" &> /dev/null
+    fi
+    docker exec -w /root "${container_name}" ip route add default via "${default_route}" &> /dev/null
+  done
+}
+
+restore_switches() {
+  local as="$1"
+  local configs_folder_name="$2"
+  
+  while IFS= read -r network switch _; do
+    local container_name="${as}_L2_${network}_${switch}"
+    echo "Restoring $container_name configuration..."
+    
+    docker cp "${configs_folder_name}${switch}/switch.db" "${container_name}:/root/switch.db"
+    docker exec -w /root "${container_name}" bash -c 'ovsdb-client restore < /root/switch.db'
+    sleep 2
+    docker exec -w /root "${container_name}" bash -c 'rm /root/switch.db'
+  done < config/l2_switches.txt
+}
+
+restore_datacenter_hosts() {
+  local as="$1"
+  local configs_folder_name="$2"
+  
+  while IFS= read -r host image network switch _; do
+    local container_name="${as}_L2_${network}_${host}"
+    echo "Restoring $container_name configuration..."
+    
+    local ipv4=$(grep -w inet "${configs_folder_name}${host}/host.ip" | grep "${as}-${switch}" | awk '{print $2}')
+    echo "Backuped $container_name IPv4: ${ipv4}"
+    
+    if [ "$useIPv6" = true ]; then
+      local ipv6=$(grep -w inet6 "${configs_folder_name}${host}/host.ip" | grep "${as}-${switch}" | awk '{print $2}')
+      echo "Backuped $container_name IPv6: ${ipv6}"
+    fi
+    
+    local default_route=$(grep -w default "${configs_folder_name}${host}/host.route" | awk '{print $3}')
+    echo "Backuped $container_name Default Route: ${default_route}"
+    
+    docker exec -w /root "${container_name}" ip address add "${ipv4}" dev "${as}-${switch}" &> /dev/null
+    if [ "$useIPv6" = true ]; then
+      docker exec -w /root "${container_name}" ip address add "${ipv6}" dev "${as}-${switch}" &> /dev/null
+    fi
+    docker exec -w /root "${container_name}" ip route add default via "${default_route}" &> /dev/null
+  done < config/l2_hosts.txt
 }
 
 show_passwords() {
@@ -176,54 +163,40 @@ show_passwords() {
   echo "---  END OF MEASUREMENT PASSWORDS  ---"
 }
 
-# create function to show red color echo
 function red_echo() {
   echo -e "\e[31m$1\e[0m"
 }
 
 show_help() {
-  echo "usage: $0 [options] [-g <AS groups>]"
-  echo "options available:"
-  echo -ne "\t-b\tbackup configs to students_config directory (-g is required)\n\t\t"
-  red_echo '(CAUTION: this will wipes all existing configs in the directory, ensure you had copy the configs beforehand)'
-  echo -ne "\t-s\treset the mini internet, performs startup.sh\n\t\t"
-  red_echo '(CAUTION: this will wipes all configs in the project, ensure you had the backup of the configs)'
-  echo -ne "\t-r\trestore ASes configs (-g is required)\n\t\t"
-  red_echo '(CAUTION: this will override the running configs)'
-  echo -e "\t-g\tspecify ASes groups to perform backup/restore with, separated by comma without whitespace (ex: 3,4,13,14)"
-  echo -e "\t-p\tshow AS passwords"
-  echo -e "\t-h\tshow help"
-  echo -e "If you are using all options, the script will do backup configs, reset the mini internet, and restore configs respectively"
+  echo "Usage: $0 [options] [-g <AS groups>]"
+  echo
+  echo "Options:"
+  echo "  -b    Backup configs to students_config directory"
+  echo "        (optional: use -g to specify ASes groups)"
+  red_echo "        CAUTION: This will wipe all existing configs in the backup directory."
+  red_echo "                 Ensure you have copied the configs beforehand."
+  echo
+  echo "  -s    Reset the mini internet (performs startup.sh)"
+  red_echo "        CAUTION: This will wipe all configs in the project."
+  red_echo "                 Ensure you have a backup of the configs."
+  echo
+  echo "  -r    Restore ASes configs"
+  echo "        (optional: use -g to specify ASes groups)"
+  red_echo "        CAUTION: This will override the running configs."
+  echo
+  echo "  -g    Specify ASes groups for backup/restore"
+  echo "        Format: comma-separated without whitespace (e.g., 3,4,13,14)"
+  echo
+  echo "  -p    Show AS passwords"
+  echo "  -h    Show this help message"
+  echo
+  echo "Note: If using all options, the script will perform backup, reset, and restore in that order."
 }
 
 check_if_root() {
   if [[ $(id -u) -ne 0 ]]; then
     echo "You must run as root, exiting..."
     exit 1
-  fi
-}
-
-run() {
-  # Check if the AS groups are specified when doing backup/restore
-  if [[ $isDoBackup == true || $isDoRestore == true ]]; then
-    check_students_as_len
-  fi
-
-  if [[ $isDoBackup == true ]]; then
-    check_if_root
-    save_configs
-  fi
-
-  if [[ $isDoRestart == true ]]; then
-    check_if_root
-    reset_with_startup
-  fi
-
-  if [[ $isDoRestore == true ]]; then
-    check_if_root
-    restore_configs
-    echo "Restart complete, here are all passwords..."
-    show_passwords
   fi
 }
 
@@ -247,44 +220,65 @@ check_students_as_len() {
     fi
 }
 
+check_routers() {
+    if [[ ${#routers[@]} -eq 0 ]]; then
+        # If routers is empty, read from l3_routers.txt
+        routers=($(awk '{print $1}' "$WORKDIR/config/l3_routers.txt"))
+        if [[ ${#routers[@]} -eq 0 ]]; then
+            echo -e "error: Unable to find router names in l3_routers.txt\n"
+            exit 1
+        fi
+        echo "Router names: ${routers[@]}"
+    fi
+}
+
 welcome() {
   if [[ $# -eq 0 ]]; then
     show_help
     exit 1
   fi
 
-  while getopts ":bsrg:h" opt; do
+  while getopts ":bsrg:hp" opt; do
     case $opt in
-      b)
-        isDoBackup=true
-        ;;
-      r)
-        isDoRestore=true
-        ;;
-      s)
-        isDoRestart=true
-        ;;
-      g)
-        # Read the AS groups from the argument
-        readarray -t students_as < <(echo $OPTARG | awk -F',' '{ for (x = 1; x <= NF; x++) print $x }')
-        # Check if the AS groups are integers
-        for i in ${students_as[@]}; do
+      b) options[backup]=true ;;
+      r) options[restore]=true ;;
+      s) options[restart]=true ;;
+      g) 
+        IFS=',' read -ra students_as <<< "$OPTARG"
+        for i in "${students_as[@]}"; do
           if ! [[ $i =~ ^[0-9]+$ ]]; then
-            echo -e "error: an AS group must be an integer\n"
+            echo "Error: AS group must be an integer" >&2
             show_help
             exit 1
           fi
         done
         ;;
-      h)
-        show_help
-        ;;
-      \?)
-        show_help
-        ;;
+      h) show_help; exit 0 ;;
+      p) show_passwords; exit 0 ;;
+      *) show_help; exit 1 ;;
     esac
   done
+  
   run
 }
 
-welcome $@
+run() {
+  for action in "${!options[@]}"; do
+    if ${options[$action]}; then
+      check_if_root
+      check_students_as_len
+      check_routers
+      case $action in
+        backup) save_configs ;;
+        restart) reset_with_startup ;;
+        restore) 
+          restore_configs
+          echo "Restart complete, here are all passwords..."
+          show_passwords
+          ;;
+      esac
+    fi
+  done
+}
+
+welcome "$@"
