@@ -7,17 +7,34 @@ routers=()
 
 useIPv6=true
 
+# Use arrays for options
+declare -A options=(
+  [backup]=false
+  [restart]=false
+  [restore]=false
+)
+
 # save all configs first
 save_configs() {
   local config_dir="$WORKDIR/../students_config"
-  mkdir -p "$config_dir"
-  cd "$config_dir" && rm -rf *
+  local timestamp=$(date +"%Y%m%d_%H%M%S")
+  local backup_dir="${config_dir}/${timestamp}"
+  mkdir -p "$backup_dir"
+  cd "$backup_dir"
 
   for as in "${students_as[@]}"; do
     echo "Saving config on AS: ${as}"
     docker exec -w /root "${as}_ssh" bash -c 'rm -rfv configs* && ./save_configs.sh'
     docker cp "${as}_ssh:/root/configs-as-${as}.tar.gz" "./configs-as-${as}.tar.gz"
   done
+
+  echo "Configs saved in: $backup_dir"
+}
+
+get_latest_backup() {
+  local config_dir="$WORKDIR/../students_config"
+  local latest_backup=$(ls -d "$config_dir"/*/ | sort -r | head -n 1)
+  echo "${latest_backup%/}"
 }
 
 reset_with_startup() {
@@ -42,9 +59,17 @@ reset_with_startup() {
 }
 
 restore_configs() {
+  local backup_dir="${1:-$(get_latest_backup)}"
+  
+  if [ ! -d "$backup_dir" ]; then
+    echo "Error: Backup directory not found: $backup_dir"
+    exit 1
+  fi
+
+  echo "Restoring configs from: $backup_dir"
+
   for as in "${students_as[@]}"; do
-    local config_dir="$WORKDIR/../students_config"
-    cd "$config_dir"
+    cd "$backup_dir"
 
     echo "Restoring config on AS: ${as}"
     docker cp "./configs-as-${as}.tar.gz" "${as}_ssh:/root/"
@@ -56,9 +81,9 @@ restore_configs() {
     local configs_folder_name=$(ls -d */ | grep configs)
 
     restore_routers "$as" "$configs_folder_name"
-    restore_hosts "$as" "$configs_folder_name"
+    restore_edge_hosts "$as" "$configs_folder_name"
     restore_switches "$as" "$configs_folder_name"
-    restore_datacenter_hosts "$as" "$configs_folder_name"
+    restore_network_hosts "$as" "$configs_folder_name"
   done
 }
 
@@ -79,7 +104,7 @@ restore_routers() {
   done
 }
 
-restore_hosts() {
+restore_edge_hosts() {
   local as="$1"
   local configs_folder_name="$2"
   
@@ -88,15 +113,15 @@ restore_hosts() {
     echo "Restoring $container_name configuration..."
     
     local ipv4=$(grep -w inet "${configs_folder_name}${rc}/host.ip" | grep "${rc}router" | awk '{print $2}')
-    echo "Backuped $container_name IPv4: ${ipv4}"
+    echo "From Backup: $container_name IPv4: ${ipv4}"
     
     if [ "$useIPv6" = true ]; then
       local ipv6=$(grep -w inet6 "${configs_folder_name}${rc}/host.ip" | grep "${rc}router" | awk '{print $2}')
-      echo "Backuped $container_name IPv6: ${ipv6}"
+      echo "From Backup: $container_name IPv6: ${ipv6}"
     fi
     
     local default_route=$(grep -w default "${configs_folder_name}${rc}/host.route" | awk '{print $3}')
-    echo "Backuped $container_name Default Route: ${default_route}"
+    echo "From Backup: $container_name Default Route: ${default_route}"
     
     docker exec -w /root "${container_name}" ip address add "${ipv4}" dev "${rc}router" &> /dev/null
     if [ "$useIPv6" = true ]; then
@@ -121,7 +146,7 @@ restore_switches() {
   done < config/l2_switches.txt
 }
 
-restore_datacenter_hosts() {
+restore_network_hosts() {
   local as="$1"
   local configs_folder_name="$2"
   
@@ -130,15 +155,15 @@ restore_datacenter_hosts() {
     echo "Restoring $container_name configuration..."
     
     local ipv4=$(grep -w inet "${configs_folder_name}${host}/host.ip" | grep "${as}-${switch}" | awk '{print $2}')
-    echo "Backuped $container_name IPv4: ${ipv4}"
+    echo "From Backup: $container_name IPv4: ${ipv4}"
     
     if [ "$useIPv6" = true ]; then
       local ipv6=$(grep -w inet6 "${configs_folder_name}${host}/host.ip" | grep "${as}-${switch}" | awk '{print $2}')
-      echo "Backuped $container_name IPv6: ${ipv6}"
+      echo "From Backup: $container_name IPv6: ${ipv6}"
     fi
     
     local default_route=$(grep -w default "${configs_folder_name}${host}/host.route" | awk '{print $3}')
-    echo "Backuped $container_name Default Route: ${default_route}"
+    echo "From Backup: $container_name Default Route: ${default_route}"
     
     docker exec -w /root "${container_name}" ip address add "${ipv4}" dev "${as}-${switch}" &> /dev/null
     if [ "$useIPv6" = true ]; then
@@ -169,12 +194,12 @@ function red_echo() {
 
 show_help() {
   echo "Usage: $0 [options] [-g <AS groups>]"
+  echo "Note: This must be run from the platform directory for relative paths to work."
   echo
   echo "Options:"
   echo "  -b    Backup configs to students_config directory"
   echo "        (optional: use -g to specify ASes groups)"
-  red_echo "        CAUTION: This will wipe all existing configs in the backup directory."
-  red_echo "                 Ensure you have copied the configs beforehand."
+  echo "        Creates a new timestamped directory for each backup"
   echo
   echo "  -s    Reset the mini internet (performs startup.sh)"
   red_echo "        CAUTION: This will wipe all configs in the project."
@@ -182,15 +207,27 @@ show_help() {
   echo
   echo "  -r    Restore ASes configs"
   echo "        (optional: use -g to specify ASes groups)"
+  echo "        Restores from the latest backup by default"
+  echo "        Use -d to specify a particular backup directory"
   red_echo "        CAUTION: This will override the running configs."
   echo
   echo "  -g    Specify ASes groups for backup/restore"
   echo "        Format: comma-separated without whitespace (e.g., 3,4,13,14)"
   echo
+  echo "  -d    Specify a backup directory to restore from"
+  echo "        If not specified, the latest backup will be used"
+  echo "        Format: full path to the backup directory"
+  echo
   echo "  -p    Show AS passwords"
   echo "  -h    Show this help message"
   echo
-  echo "Note: If using all options, the script will perform backup, reset, and restore in that order."
+  echo "Examples:"
+  echo "  $0 -b -g 3,4,13,14     # Backup configs for AS groups 3, 4, 13, and 14"
+  echo "  $0 -r                  # Restore configs from the latest backup"
+  echo "  $0 -r -d /path/to/backup  # Restore configs from a specific backup directory"
+  echo "  $0 -b -s -r            # Backup, reset, and restore in that order"
+  echo
+  echo "Note: If using multiple options, the script will perform backup, reset, and restore in that order."
 }
 
 check_if_root() {
@@ -238,7 +275,9 @@ welcome() {
     exit 1
   fi
 
-  while getopts ":bsrg:hp" opt; do
+  local specified_backup=""
+
+  while getopts ":bsrg:hp:d:" opt; do
     case $opt in
       b) options[backup]=true ;;
       r) options[restore]=true ;;
@@ -255,14 +294,17 @@ welcome() {
         ;;
       h) show_help; exit 0 ;;
       p) show_passwords; exit 0 ;;
+      d) specified_backup="$OPTARG" ;;
       *) show_help; exit 1 ;;
     esac
   done
   
-  run
+  run "$specified_backup"
 }
 
 run() {
+  local specified_backup="$1"
+
   for action in "${!options[@]}"; do
     if ${options[$action]}; then
       check_if_root
@@ -272,7 +314,11 @@ run() {
         backup) save_configs ;;
         restart) reset_with_startup ;;
         restore) 
-          restore_configs
+          if [ -n "$specified_backup" ]; then
+            restore_configs "$specified_backup"
+          else
+            restore_configs
+          fi
           echo "Restart complete, here are all passwords..."
           show_passwords
           ;;
