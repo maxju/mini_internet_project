@@ -1,7 +1,7 @@
 #!/bin/bash
 # modified from https://github.com/anandadfoxx/mini_internet_project/tree/restartor
 
-WORKDIR="$(pwd)/"
+WORKDIR="$(pwd)"
 routers=('CAIR' 'KHAR' 'LUAN' 'CAPE' 'ADDI' 'ACCR' 'NAIR' 'KINS')
 
 # Variables for this script
@@ -12,7 +12,7 @@ useIPv6=true  # Set this to false to disable IPv6 operations
 
 # save all configs first
 save_configs() {
-  cd $WORKDIR../
+  cd $WORKDIR/../
   if ! [[ -d students_config ]]; then
     mkdir students_config
   fi
@@ -55,7 +55,7 @@ reset_with_startup() {
 
 restore_configs() {
   for as in ${students_as[@]}; do
-    cd $WORKDIR../students_config/
+    cd $WORKDIR/../students_config/
 
     echo "Restoring config on AS: ${as}"
     docker cp ./configs-as-${as}.tar.gz ${as}_ssh:/root/configs-as-${as}.tar.gz
@@ -65,13 +65,13 @@ Y
 EOF
 
     # Extract the config file
-    cd $WORKDIR../students_config/; rm -rf configs_*; tar -xf configs-as-${as}.tar.gz
+    cd $WORKDIR/../students_config/; rm -rf configs_*; tar -xf configs-as-${as}.tar.gz
     # Get configs folder name
     configs_folder_name=$(ls -d */ | grep configs)
 
     # Restore router files
     for rc in ${routers[@]}; do
-      cd $WORKDIR../students_config/
+      cd $WORKDIR/../students_config/
 
       container_name=${as}_${rc}router
 
@@ -89,7 +89,7 @@ EOF
     
     # Restore router hosts
     for rc in ${routers[@]}; do
-      cd $WORKDIR../students_config/
+      cd $WORKDIR/../students_config/
 
       container_name=${as}_${rc}host
 
@@ -116,7 +116,7 @@ EOF
     
     # Restore switch files into switch
     while IFS= read -r network switch _; do
-      cd $WORKDIR../students_config/
+      cd $WORKDIR/../students_config/
 
       container_name=${as}_L2_${network}_${switch}
 
@@ -129,11 +129,11 @@ EOF
       docker exec -itw /root ${container_name} bash -c 'ovsdb-client restore < /root/switch.db'
       sleep 2
       docker exec -itw /root ${container_name} bash -c 'rm /root/switch.db'
-    done < ../config/l2_switches.txt
+    done < config/l2_switches.txt
 
     # Restore Datacenter Hosts
     while IFS= read -r host image network switch _; do
-      cd "$WORKDIR../students_config/"
+      cd "$WORKDIR/../students_config/"
 
       container_name=${as}_L2_${network}_${host}
 
@@ -156,7 +156,7 @@ EOF
         docker exec -itw /root "${container_name}" ip address add "${ipv6}" dev "${as}-${switch}" &> /dev/null
       fi
       docker exec -itw /root "${container_name}" ip route add default via "${default_route}" &> /dev/null
-    done < ../config/l2_hosts.txt
+    done < config/l2_hosts.txt
   done
 }
 
@@ -229,7 +229,7 @@ run() {
 check_students_as_len() {
     if [[ ${#students_as[@]} -eq 0 ]]; then
         # If students_as is empty, read from AS_config.txt
-        readarray -t students_as < <(awk '$2 == "AS" && $3 == "NoConfig" {print $1}' "$WORKDIR/../config/AS_config.txt")
+        readarray -t students_as < <(awk '$2 == "AS" && $3 == "NoConfig" {print $1}' "$WORKDIR/config/AS_config.txt")
         if [[ ${#students_as[@]} -eq 0 ]]; then
             echo -e "error: Unable to find student AS groups in AS_config.txt\n"
             show_help
