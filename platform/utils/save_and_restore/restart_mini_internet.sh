@@ -146,9 +146,9 @@ restore_switches() {
   local as="$1"
   local configs_folder_name="$2"
   
-  while IFS= read -r network switch _; do
+  while IFS=$'\t' read -r network switch type mac_address id; do
     local container_name="${as}_L2_${network}_${switch}"
-    echo "Restoring $container_name configuration..."
+    echo "Restoring AS $as L2 switch: $container_name"
     
     docker cp "${configs_folder_name}${switch}/switch.db" "${container_name}:/root/switch.db"
     docker exec -w /root "${container_name}" bash -c 'ovsdb-client restore < /root/switch.db'
@@ -161,7 +161,7 @@ restore_network_hosts() {
   local as="$1"
   local configs_folder_name="$2"
   
-  while IFS= read -r host image network switch _; do
+  while IFS=$'\t' read -r host image network switch _; do
     local container_name="${as}_L2_${network}_${host}"
     echo "Restoring $container_name configuration..."
     
