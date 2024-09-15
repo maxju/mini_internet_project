@@ -22,12 +22,16 @@ save_configs() {
   mkdir -p "$backup_dir"
   cd "$backup_dir"
 
+  echo "Backup directory: $backup_dir"
+
   for as in "${students_as[@]}"; do
     echo "Saving config on AS: ${as}"
     docker exec -w /root "${as}_ssh" bash -c 'rm -rfv configs* && ./save_configs.sh'
     docker cp "${as}_ssh:/root/configs-as-${as}.tar.gz" "./configs-as-${as}.tar.gz"
+    echo "Config for AS ${as} saved successfully."
   done
 
+  echo "Backup process completed."
   echo "Configs saved in: $backup_dir"
 }
 
@@ -38,7 +42,6 @@ get_latest_backup() {
 }
 
 reset_with_startup() {
-  echo "Resetting mini internet with startup.sh again..."
   cd $WORKDIR
   
   # Hard reset
@@ -311,10 +314,12 @@ run() {
 
   # Perform actions in a specific order: backup, restart, restore
   if ${options[backup]}; then
+    echo "Backup configs..."
     save_configs
   fi
 
   if ${options[restart]}; then
+    echo "Resetting the mini internet..."
     reset_with_startup
   fi
 
@@ -322,6 +327,7 @@ run() {
     if [ -n "$specified_backup" ]; then
       restore_configs "$specified_backup"
     else
+      echo "Restoring configs from latest backup..."
       restore_configs
     fi
     echo "Restore complete, here are all passwords..."
