@@ -142,27 +142,29 @@ restore_edge_hosts() {
   done
 }
 
-restore_switches() {
+restore_as_l2_switches() {
   local as="$1"
   local configs_folder_name="$2"
   
-  while IFS=$'\t' read -r network switch type mac_address id; do
+  while read -r network switch type mac_address id; do
     local container_name="${as}_L2_${network}_${switch}"
+    container_name=$(echo "$container_name" | tr -d ' ')
     echo "Restoring AS $as L2 switch: $container_name"
     
     docker cp "${configs_folder_name}${switch}/switch.db" "${container_name}:/root/switch.db"
     docker exec -w /root "${container_name}" bash -c 'ovsdb-client restore < /root/switch.db'
     sleep 2
     docker exec -w /root "${container_name}" bash -c 'rm /root/switch.db'
-  done < "$WORKDIR/config/l2_switches.txt"
+  done < <(sed 's/^[[:space:]]*//' "$WORKDIR/config/l2_switches.txt" | grep -v '^$')
 }
 
-restore_network_hosts() {
+restore_as_datacenter_hosts() {
   local as="$1"
   local configs_folder_name="$2"
   
-  while IFS=$'\t' read -r host image network switch _; do
+  while read -r host image network switch _; do
     local container_name="${as}_L2_${network}_${host}"
+    container_name=$(echo "$container_name" | tr -d ' ')
     echo "Restoring $container_name configuration..."
     
     local ipv4=$(grep -w inet "${configs_folder_name}${host}/host.ip" | grep "${as}-${switch}" | awk '{print $2}')
@@ -181,7 +183,7 @@ restore_network_hosts() {
       docker exec -w /root "${container_name}" ip address add "${ipv6}" dev "${as}-${switch}" &> /dev/null
     fi
     docker exec -w /root "${container_name}" ip route add default via "${default_route}" &> /dev/null
-  done < "$WORKDIR/config/l2_hosts.txt"
+  done < <(sed 's/^[[:space:]]*//' "$WORKDIR/config/l2_hosts.txt" | grep -v '^$')
 }
 
 show_passwords() {
