@@ -142,7 +142,7 @@ restore_edge_hosts() {
   done
 }
 
-restore_as_l2_switches() {
+restore_switches() {
   local as="$1"
   local configs_folder_name="$2"
   
@@ -158,7 +158,7 @@ restore_as_l2_switches() {
   done < <(sed 's/^[[:space:]]*//' "$WORKDIR/config/l2_switches.txt" | grep -v '^$')
 }
 
-restore_as_datacenter_hosts() {
+restore_network_hosts() {
   local as="$1"
   local configs_folder_name="$2"
   
