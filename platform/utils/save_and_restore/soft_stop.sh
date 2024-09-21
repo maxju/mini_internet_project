@@ -71,4 +71,27 @@ for ((k=0;k<group_numbers;k++)); do
 
                 # Stop hosts
                 for ((l=0;l<n_l2_hosts;l++)); do
-                    host_l=(${l
+                    host_l=(${l2_hosts[$l]})
+                    hname="${host_l[0]}"
+                    l2name="${host_l[2]}"
+                    stop_container "${group_number}_L2_${l2name}_${hname}"
+                done
+            fi
+        done
+    elif [ "${group_as}" = "IXP" ]; then
+        # Stop IXP router
+        stop_container "${group_number}_IXP"
+    fi
+done
+
+# Stop other containers
+stop_container "DNS"
+stop_container "MEASUREMENT"
+stop_container "MATRIX"
+stop_container "WEB"
+stop_container "PROXY"
+
+wait # wait for all background processes to finish
+
+echo "$(date +%Y-%m-%d_%H-%M-%S)"
+echo "Soft stop completed. All containers have been stopped."
