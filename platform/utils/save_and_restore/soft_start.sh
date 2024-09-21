@@ -8,7 +8,8 @@ set -o nounset
 
 start_time=$(date +%s)
 
-DIRECTORY="$1"
+# start in the platform directory
+DIRECTORY=$(pwd)
 source "${DIRECTORY}"/config/subnet_config.sh
 
 # read configs

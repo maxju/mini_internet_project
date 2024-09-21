@@ -6,7 +6,8 @@ set -o errexit
 set -o pipefail
 set -o nounset
 
-DIRECTORY="$1"
+# start in the platform directory
+DIRECTORY=$(pwd)
 source "${DIRECTORY}"/config/subnet_config.sh
 
 # read configs
