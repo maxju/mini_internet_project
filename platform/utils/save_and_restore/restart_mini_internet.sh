@@ -1,6 +1,10 @@
 #!/bin/bash
 # modified script from https://github.com/nsg-ethz/mini_internet_project/pull/43
 
+#suggested cron job:
+#    */10 * * * * cd /path/to/your/platform && ./restart_mini_internet.sh -b >> /path/to/logfile.log 2>&1
+
+# */10 * * * * cd /home/service/mini_internet_project/platform && ./utils/save_and_restore/restart_mini_internet.sh -b >> /home/service/logs/mini_internet_backup.log 2>&1
 WORKDIR="$(pwd)"
 students_as=()
 routers=()
@@ -12,6 +16,7 @@ declare -A options=(
   [backup]=false
   [restart]=false
   [restore]=false
+  [confirm]=false
 )
 
 # save all configs first
@@ -262,12 +267,14 @@ check_students_as_len() {
         fi
     fi
     echo "Students AS groups: ${students_as[@]}"
-    # Ask for confirmation before proceeding
-    echo -n "Do you want to continue with these AS groups? (y/n): "
-    read answer
-    if [[ "$answer" != "y" && "$answer" != "Y" ]]; then
-        echo "Operation cancelled."
-        exit 0
+    if !${options[confirm]}; then
+        # Ask for confirmation before proceeding
+        echo -n "Do you want to continue with these AS groups? (y/n): "
+        read answer
+        if [[ "$answer" != "y" && "$answer" != "Y" ]]; then
+            echo "Operation cancelled."
+            exit 0
+        fi
     fi
 }
 
@@ -296,6 +303,7 @@ welcome() {
       b) options[backup]=true ;;
       r) options[restore]=true ;;
       s) options[restart]=true ;;
+      y) options[confirm]=true ;;
       g) 
         IFS=',' read -ra students_as <<< "$OPTARG"
         for i in "${students_as[@]}"; do
