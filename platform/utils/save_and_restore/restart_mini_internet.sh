@@ -299,7 +299,7 @@ welcome() {
 
   local specified_backup=""
 
-  while getopts ":bsrg:hp:d:" opt; do
+  while getopts ":bsryg:hp:d:" opt; do
     case $opt in
       b) options[backup]=true ;;
       r) options[restore]=true ;;
