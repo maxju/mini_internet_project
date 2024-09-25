@@ -2,9 +2,8 @@
 # modified script from https://github.com/nsg-ethz/mini_internet_project/pull/43
 
 #suggested cron job:
-#    */10 * * * * cd /path/to/your/platform && ./restart_mini_internet.sh -b >> /path/to/logfile.log 2>&1
+#    */10 * * * * cd /path/to/your/platform && ./restart_mini_internet.sh -b -y >> /path/to/logfile.log 2>&1
 
-# */10 * * * * cd /home/service/mini_internet_project/platform && ./utils/save_and_restore/restart_mini_internet.sh -b >> /home/service/logs/mini_internet_backup.log 2>&1
 WORKDIR="$(pwd)"
 students_as=()
 routers=()
@@ -30,11 +29,11 @@ save_configs() {
   echo "Backup directory: $backup_dir"
 
   for as in "${students_as[@]}"; do
-    docker exec -itw /root ${as}_ssh bash -c 'rm -rfv configs*' > /dev/null
-    docker exec -itw /root ${as}_ssh "./save_configs.sh" > /dev/null
+    docker exec -iw /root ${as}_ssh bash -c 'rm -rfv configs*' > /dev/null
+    docker exec -iw /root ${as}_ssh "./save_configs.sh" > /dev/null
 
-    configName=$(docker exec -itw /root ${as}_ssh bash -c 'find . -maxdepth 1 -regex \./.*.tar.gz' | sed -e 's/\r$//')
-    docker exec -itw /root ${as}_ssh bash -c "mv $configName configs-as-${as}.tar.gz"
+    configName=$(docker exec -iw /root ${as}_ssh bash -c 'find . -maxdepth 1 -regex \./.*.tar.gz' | sed -e 's/\r$//')
+    docker exec -iw /root ${as}_ssh bash -c "mv $configName configs-as-${as}.tar.gz"
 
     if docker cp ${as}_ssh:/root/configs-as-${as}.tar.gz ./configs-as-${as}.tar.gz; then
         echo "Config file for AS ${as} copied successfully."
@@ -56,12 +55,9 @@ get_latest_backup() {
 
 reset_with_startup() {
   cd $WORKDIR
-  
-  # Hard reset
   echo "Executing cleanup.sh & hard_reset.sh ..."
   ./cleanup/cleanup.sh . && ./cleanup/hard_reset.sh .
 
-  # Then startup
   echo "Executing startup.sh ..."
   # currently disabled the iptables filters feature
   # ./startup.sh . && ./utils/iptables/filters.sh .
