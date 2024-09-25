@@ -237,6 +237,7 @@ show_help() {
   echo "        If not specified, the latest backup will be used"
   echo "        Format: full path to the backup directory"
   echo
+  echo "  -y    Skip confirmation prompts"
   echo "  -p    Show AS passwords"
   echo "  -h    Show this help message"
   echo
@@ -267,7 +268,7 @@ check_students_as_len() {
         fi
     fi
     echo "Students AS groups: ${students_as[@]}"
-    if !${options[confirm]}; then
+    if ! ${options[confirm]}; then
         # Ask for confirmation before proceeding
         echo -n "Do you want to continue with these AS groups? (y/n): "
         read answer
@@ -304,7 +305,7 @@ welcome() {
       r) options[restore]=true ;;
       s) options[restart]=true ;;
       y) options[confirm]=true ;;
-      g) 
+      g)
         IFS=',' read -ra students_as <<< "$OPTARG"
         for i in "${students_as[@]}"; do
           if ! [[ $i =~ ^[0-9]+$ ]]; then
@@ -320,7 +321,7 @@ welcome() {
       *) show_help; exit 1 ;;
     esac
   done
-  
+
   run "$specified_backup"
 }
 
